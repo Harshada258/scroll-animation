@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ITZFIZZ — Performance Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+  <style>
+    :root {
+      --bg:      #080c14;
+      --panel:   #0f1829;
+      --blue:    #0ea5e9;
+      --blue2:   #38bdf8;
+      --accent:  #2563eb;
+      --cyan:    #06b6d4;
+      --white:   #f0f6ff;
+      --muted:   #3d5270;
+      --border:  rgba(14,165,233,0.2);
+      --success: #10b981;
+      --warn:    #f59e0b;
+      --hdr:     52px;
+
+      /* road height: smaller on mobile */
+      --road-h: clamp(90px, 18vw, 180px);
+    }
+
+    *{ margin:0; padding:0; box-sizing:border-box; }
+    html, body{ height:100%; }
+
+    body{
+      font-family:'Barlow Condensed', sans-serif;
+      background:var(--bg); color:var(--white);
+      overflow-x:hidden;
+    }
+
+    /* dot-grid bg */
+    body::before{
+      content:''; position:fixed; inset:0;
+      background-image:radial-gradient(rgba(14,165,233,0.07) 1px, transparent 1px);
+      background-size:28px 28px;
+      pointer-events:none; z-index:0;
+    }
+    /* vignette */
+    body::after{
+      content:''; position:fixed; inset:0;
+      background:radial-gradient(ellipse at center, transparent 35%, rgba(8,12,20,0.65) 100%);
+      pointer-events:none; z-index:1;
+    }
+
+    /* ═══ HEADER ═══ */
+    .header{
+      position:fixed; top:0; left:0; right:0; z-index:300;
+      display:flex; align-items:center; justify-content:space-between;
+      padding:0 1.2rem; height:var(--hdr);
+      background:rgba(8,12,20,0.94);
+      border-bottom:1px solid var(--border);
+      backdrop-filter:blur(20px);
+    }
+    @media(min-width:601px){ .header{ padding:0 2rem; } }
+
+    .header-left{ display:flex; align-items:center; gap:0.9rem; }
+    .logo{
+      font-family:'Orbitron', sans-serif;
+      font-size:0.95rem; font-weight:900;
+      letter-spacing:0.2em; color:var(--blue);
+    }
+    .logo span{ color:var(--white); }
+    .h-divider{ width:1px; height:18px; background:var(--border); }
+    .h-sub{
+      font-family:'Share Tech Mono', monospace;
+      font-size:0.55rem; letter-spacing:0.12em;
+      color:var(--muted); text-transform:uppercase;
+      display:none;
+    }
+    @media(min-width:480px){ .h-sub{ display:block; } }
+
+    .header-right{ display:flex; align-items:center; gap:0.7rem; }
+    .status-dot{
+      width:6px; height:6px; border-radius:50%;
+      background:var(--success); box-shadow:0 0 7px var(--success);
+      animation:blink 2.4s ease-in-out infinite; flex-shrink:0;
+    }
+    @keyframes blink{ 0%,100%{opacity:1} 50%{opacity:0.2} }
+    .status-txt{
+      font-family:'Share Tech Mono', monospace;
+      font-size:0.52rem; letter-spacing:0.13em;
+      color:var(--muted); text-transform:uppercase;
+      display:none;
+    }
+    @media(min-width:500px){ .status-txt{ display:block; } }
+    .fy-badge{
+      font-family:'Orbitron', sans-serif;
+      font-size:0.58rem; font-weight:700;
+      color:var(--blue2); letter-spacing:0.1em;
+      border:1px solid var(--border);
+      padding:3px 8px; border-radius:2px;
+      background:rgba(14,165,233,0.06);
+      white-space:nowrap;
+    }
+
+    /* ═══ SCROLL SECTION ═══ */
+    .section{ height:300vh; position:relative; }
+
+    /* ═══ STICKY TRACK ═══
+       Mobile:  header / title / road / stats-grid
+       Desktop: header / [title + stats-top] / road / [stats-bottom]
+    */
+    .track{
+      position:sticky; top:0;
+      height:100vh; width:100%;
+      overflow:hidden; z-index:2;
+      display:flex; flex-direction:column;
+    }
+
+    /* left rule — desktop only */
+    .track::before{
+      content:''; position:absolute;
+      left:3rem; top:var(--hdr); bottom:0; width:1px;
+      background:linear-gradient(to bottom,
+        transparent, rgba(14,165,233,0.14) 20%,
+        rgba(14,165,233,0.14) 80%, transparent);
+      z-index:0; pointer-events:none;
+      display:none;
+    }
+    @media(min-width:601px){ .track::before{ display:block; } }
+
+    /* ── spacer for fixed header ── */
+    .track-hdr-space{ height:var(--hdr); flex-shrink:0; }
+
+    /* ── TITLE ROW ── */
+    .title-row{
+      flex:1; position:relative; z-index:10;
+      display:flex; align-items:flex-end; justify-content:space-between;
+      padding:0 1.2rem 1.2rem;
+    }
+    @media(min-width:601px){ .title-row{ padding:0 3rem 2rem; } }
+
+    .title-block{ display:flex; flex-direction:column; gap:0.25rem; }
+    .eyebrow{
+      font-family:'Share Tech Mono', monospace;
+      font-size:0.52rem; letter-spacing:0.3em;
+      color:var(--blue); text-transform:uppercase;
+      display:flex; align-items:center; gap:0.5rem;
+    }
+    .eyebrow::before{
+      content:''; display:block; width:20px; height:1px; background:var(--blue);
+    }
+    .main-title{
+      font-family:'Orbitron', sans-serif;
+      font-size:clamp(1.5rem, 5vw, 4rem);
+      font-weight:900; line-height:0.95; letter-spacing:0.04em;
+      color:var(--white);
+    }
+    .main-title em{ font-style:normal; color:var(--blue); text-shadow:0 0 35px rgba(14,165,233,0.4); }
+
+    /* desktop stat pair — top-right of title row */
+    .desk-pair{
+      display:none; gap:135px; align-self:flex-end;
+    }
+    @media(min-width:700px){ .desk-pair{ display:flex; } }
+
+    /* ── ROAD STRIP ── */
+    .road-wrapper{ position:relative; width:100%; flex-shrink:0; z-index:20; }
+    .road-edge{
+      height:1px; width:100%;
+      background:linear-gradient(to right, transparent 0%, var(--blue) 15%, var(--cyan) 85%, transparent);
+      opacity:0.4;
+    }
+    .road{
+      width:100%; height:var(--road-h);
+      position:relative; overflow:hidden;
+      background:linear-gradient(to bottom,#090e1a,#0a1020,#090e1a);
+    }
+    /* grid overlay */
+    .road::before{
+      content:''; position:absolute; inset:0;
+      background-image:
+        repeating-linear-gradient(90deg, rgba(14,165,233,0.04) 0,rgba(14,165,233,0.04) 1px, transparent 1px, transparent 60px),
+        repeating-linear-gradient(0deg,  rgba(14,165,233,0.04) 0,rgba(14,165,233,0.04) 1px, transparent 1px, transparent 40px);
+    }
+    .road-lane{
+      position:absolute; top:50%; left:0; right:0; height:1px;
+      background:repeating-linear-gradient(
+        to right, transparent 0,transparent 24px,
+        rgba(14,165,233,0.17) 24px, rgba(14,165,233,0.17) 56px
+      );
+    }
+    .road::after{
+      content:''; position:absolute; inset:0;
+      background:
+        linear-gradient(to bottom,rgba(14,165,233,0.06) 0%,transparent 30%),
+        linear-gradient(to top,   rgba(6,182,212,0.06) 0%,transparent 30%);
+      pointer-events:none;
+    }
+    .sector-bar{
+      position:absolute; top:0; left:0; right:0; height:3px; z-index:15;
+      background:rgba(255,255,255,0.04); overflow:hidden;
+    }
+    .sector-fill{
+      height:100%; width:0%;
+      background:linear-gradient(to right,var(--accent),var(--blue),var(--cyan));
+      box-shadow:0 0 8px rgba(14,165,233,0.5);
+    }
+    .car{
+      height:var(--road-h); position:absolute; top:0; left:0; z-index:10;
+      filter:
+        drop-shadow(0 0 18px rgba(14,165,233,0.65))
+        drop-shadow(0 0 45px rgba(14,165,233,0.2))
+        drop-shadow(0 4px 12px rgba(0,0,0,0.9));
+    }
+    .trail{
+      height:var(--road-h); position:absolute; top:0; left:0;
+      z-index:1; width:0;
+      background:linear-gradient(to right,
+        transparent 0%,rgba(14,165,233,0.03) 35%,
+        rgba(14,165,233,0.1) 72%,rgba(14,165,233,0.28) 96%,transparent 100%
+      );
+    }
+    .speed-lines{ position:absolute; inset:0; z-index:2; pointer-events:none; overflow:hidden; }
+    .speed-line{
+      position:absolute; height:1px;
+      background:linear-gradient(to right,transparent,rgba(14,165,233,0.28),transparent); opacity:0;
+    }
+    .value-add{
+      position:absolute; z-index:5; display:flex; flex-wrap:nowrap;
+      top:50%; left:3%; transform:translateY(-50%); pointer-events:none;
+    }
+    .value-letter{
+      font-family:'Orbitron', sans-serif;
+      font-size:clamp(1rem, 3.2vw, 4rem);
+      font-weight:900; letter-spacing:0.2em;
+      color:var(--blue2); opacity:0; transition:opacity 0.08s;
+      text-shadow:0 0 22px rgba(14,165,233,0.7),0 0 45px rgba(14,165,233,0.25);
+    }
+    /* speedo — desktop only */
+    .speedo{
+      position:absolute; right:2%; top:50%; transform:translateY(-50%);
+      z-index:30; flex-direction:column; align-items:center; gap:3px;
+      display:none;
+    }
+    @media(min-width:601px){ .speedo{ display:flex; } }
+    .speedo-track{
+      width:3px; height:70px; background:rgba(255,255,255,0.05);
+      border-radius:2px; position:relative; overflow:hidden;
+    }
+    .speedo-fill{
+      position:absolute; bottom:0; left:0; right:0; height:0%;
+      background:linear-gradient(to top,var(--blue),transparent);
+      box-shadow:0 0 5px var(--blue);
+    }
+    .speedo-label{
+      font-family:'Share Tech Mono', monospace; font-size:0.44rem;
+      letter-spacing:0.18em; color:var(--muted);
+      writing-mode:vertical-rl; text-transform:uppercase; margin-top:3px;
+    }
+
+    /* ── STATS ZONE (below road) ── */
+    .stats-zone{
+      flex:1; position:relative; z-index:10;
+      display:flex; align-items:flex-start;
+      padding:1.2rem 1.2rem 0;
+    }
+    @media(min-width:601px){ .stats-zone{ padding:2rem 3rem 0; justify-content:flex-end; } }
+
+    /* mobile: full-width 2×2 grid */
+    .mobile-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:0.5rem;
+      width:100%;
+    }
+    @media(min-width:700px){ .mobile-grid{ display:none; } }
+
+    /* desktop: flex row of 2 */
+    .desk-pair-bot{
+      display:none; gap:120px;
+    }
+    @media(min-width:700px){ .desk-pair-bot{ display:flex; } }
+
+    /* ═══ TELEM CARD ═══ */
+    .telem-card{
+      position:relative;
+      background:var(--panel);
+      border:1px solid var(--border);
+      padding:0.8rem 1rem;
+      opacity:0;
+      clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,8px 100%,0 calc(100% - 8px));
+      transition:box-shadow 0.3s;
+      min-width:0; /* allow grid shrink */
+    }
+    @media(min-width:601px){ .telem-card{ padding:1rem 1.4rem; min-width:150px; } }
+    .telem-card:hover{ box-shadow:0 0 20px rgba(14,165,233,0.1); }
+    .telem-card::before,.telem-card::after{
+      content:''; position:absolute;
+      width:9px; height:9px; border-color:var(--blue); border-style:solid;
+    }
+    .telem-card::before{ top:-1px; left:-1px; border-width:2px 0 0 2px; }
+    .telem-card::after{  bottom:-1px; right:-1px; border-width:0 2px 2px 0; }
+
+    .telem-label{
+      font-family:'Share Tech Mono', monospace;
+      font-size:0.48rem; letter-spacing:0.2em;
+      color:var(--muted); text-transform:uppercase; margin-bottom:0.2rem;
+    }
+    .telem-value{
+      font-family:'Orbitron', sans-serif;
+      font-size:clamp(1.5rem, 4vw, 2.8rem);
+      font-weight:700; line-height:1;
+    }
+    .telem-desc{
+      font-size:0.56rem; letter-spacing:0.07em;
+      color:var(--muted); text-transform:uppercase;
+      margin-top:0.3rem; line-height:1.5;
+      display:none;
+    }
+    @media(min-width:500px){ .telem-desc{ display:block; } }
+    .telem-bar-track{
+      margin-top:0.5rem; height:2px;
+      background:rgba(255,255,255,0.06); border-radius:2px; overflow:hidden;
+    }
+    .telem-bar-fill{
+      height:100%; border-radius:2px; width:0%;
+      transition:width 1.2s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    /* colour variants */
+    .c-primary .telem-value{ color:var(--blue2); }
+    .c-primary .telem-bar-fill{ background:linear-gradient(to right,var(--accent),var(--blue2)); }
+    .c-success .telem-value{ color:var(--success); }
+    .c-success .telem-bar-fill{ background:linear-gradient(to right,#065f46,var(--success)); }
+    .c-cyan    .telem-value{ color:var(--cyan); }
+    .c-cyan    .telem-bar-fill{ background:linear-gradient(to right,#164e63,var(--cyan)); }
+    .c-warn    .telem-value{ color:var(--warn); }
+    .c-warn    .telem-bar-fill{ background:linear-gradient(to right,#78350f,var(--warn)); }
+
+    /* corner decorations */
+    .c-tl,.c-br{
+      position:absolute; width:40px; height:40px; pointer-events:none; z-index:5;
+    }
+    .c-tl{ top:var(--hdr); left:0; border-top:1px solid rgba(14,165,233,0.2); border-left:1px solid rgba(14,165,233,0.2); }
+    .c-br{ bottom:0; right:0; border-bottom:1px solid rgba(14,165,233,0.2); border-right:1px solid rgba(14,165,233,0.2); }
+
+    /* system strip — desktop only */
+    .sys-strip{
+      position:absolute; bottom:5%; left:3rem;
+      z-index:30; flex-direction:column; gap:4px;
+      display:none;
+    }
+    @media(min-width:601px){ .sys-strip{ display:flex; } }
+    .sys-item{
+      font-family:'Share Tech Mono', monospace;
+      font-size:0.48rem; letter-spacing:0.16em;
+      color:var(--muted); text-transform:uppercase;
+      display:flex; gap:0.5rem; align-items:center;
+    }
+    .sys-item span{ color:rgba(14,165,233,0.45); }
+    .sys-dot{ width:4px; height:4px; border-radius:50%; background:var(--success); flex-shrink:0; }
+
+    /* scroll hint */
+    .scroll-hint{
+      position:absolute; bottom:2%; left:50%; transform:translateX(-50%);
+      z-index:30; display:flex; flex-direction:column; align-items:center; gap:4px;
+      opacity:0.4; transition:opacity 0.4s;
+    }
+    .scroll-hint span{
+      font-family:'Share Tech Mono', monospace;
+      font-size:0.48rem; letter-spacing:0.28em;
+      text-transform:uppercase; color:var(--muted);
+    }
+    .scroll-arrow{
+      width:1px; height:20px;
+      background:linear-gradient(to bottom,var(--blue),transparent);
+      animation:pd 1.6s ease-in-out infinite;
+    }
+    @keyframes pd{ 0%,100%{opacity:0.3;transform:scaleY(0.7)} 50%{opacity:1;transform:scaleY(1)} }
+
+    /* mobile progress bar */
+    .prog-bar{
+      position:fixed; bottom:0; left:0; height:2px; width:0%;
+      background:linear-gradient(to right,var(--accent),var(--blue),var(--cyan));
+      z-index:500;
+    }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-left">
+    <div class="logo">ITZ<span>FIZZ</span></div>
+    <div class="h-divider"></div>
+    <div class="h-sub">Performance Dashboard</div>
+  </div>
+</header>
+
+<div class="prog-bar" id="progBar"></div>
+
+<div class="section">
+  <div class="track">
+    <div class="c-tl"></div>
+    <div class="c-br"></div>
+
+    <!-- header spacer -->
+    <div class="track-hdr-space"></div>
+
+    <!-- TITLE ROW -->
+    <div class="title-row">
+      <div class="title-block">
+        <div class="eyebrow">Annual Performance Report</div>
+        <div class="main-title">Key<br><em>Results</em></div>
+      </div>
+      <!-- desktop top-right pair -->
+      <div class="desk-pair">
+        <div class="telem-card c-primary" id="box1">
+          <div class="telem-label">Pickup</div>
+          <div class="telem-value">58%</div>
+          <div class="telem-desc">Increase in<br>pick-up point use</div>
+          <div class="telem-bar-track"><div class="telem-bar-fill" data-pct="58"></div></div>
+        </div>
+        <div class="telem-card c-success" id="box2" style="margin-left:1px">
+          <div class="telem-label">Support</div>
+          <div class="telem-value">23%</div>
+          <div class="telem-desc">Decrease in<br>customer calls</div>
+          <div class="telem-bar-track"><div class="telem-bar-fill" data-pct="23"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ROAD -->
+    <div class="road-wrapper">
+      <div class="road-edge"></div>
+      <div class="road" id="road">
+        <div class="sector-bar"><div class="sector-fill" id="sectorFill"></div></div>
+        <div class="road-lane"></div>
+        <div class="speed-lines" id="speedLines"></div>
+        <img src="car.png" alt="car" class="car" id="car"/>
+        <div class="trail" id="trail"></div>
+        <div class="value-add" id="valueText">
+          <span class="value-letter">W</span><span class="value-letter">E</span>
+          <span class="value-letter">L</span><span class="value-letter">C</span>
+          <span class="value-letter">O</span><span class="value-letter">M</span>
+          <span class="value-letter">E</span><span class="value-letter">&nbsp;</span>
+          <span class="value-letter">I</span><span class="value-letter">T</span>
+          <span class="value-letter">Z</span><span class="value-letter">F</span>
+          <span class="value-letter">I</span><span class="value-letter">Z</span>
+          <span class="value-letter">Z</span>
+        </div>
+        <div class="speedo">
+          <div class="speedo-track"><div class="speedo-fill" id="speedoFill"></div></div>
+          <div class="speedo-label">V-MAX</div>
+        </div>
+      </div>
+      <div class="road-edge"></div>
+    </div>
+
+    <!-- STATS ZONE -->
+    <div class="stats-zone">
+
+      <!-- MOBILE: 2×2 grid -->
+      <div class="mobile-grid">
+        <div class="telem-card c-primary" id="mb1">
+          <div class="telem-label">Pickup</div>
+          <div class="telem-value">58%</div>
+          <div class="telem-desc">Pick-up point use</div>
+          <div class="telem-bar-track"><div class="telem-bar-fill" data-pct="58"></div></div>
+        </div>
+        <div class="telem-card c-success" id="mb2">
+          <div class="telem-label">Support</div>
+          <div class="telem-value">23%</div>
+          <div class="telem-desc">Customer calls</div>
+          <div class="telem-bar-track"><div class="telem-bar-fill" data-pct="23"></div></div>
+        </div>
+        <div class="telem-card c-cyan" id="mb3">
+          <div class="telem-label">Growth</div>
+          <div class="telem-value">27%</div>
+          <div class="telem-desc">Overall revenue</div>
+          <div class="telem-bar-track"><div class="telem-bar-fill" data-pct="27"></div></div>
+        </div>
+        <div class="telem-card c-warn" id="mb4">
+          <div class="telem-label">Efficiency</div>
+          <div class="telem-value">40%</div>
+          <div class="telem-desc">Processing time</div>
+          <div class="telem-bar-track"><div class="telem-bar-fill" data-pct="40"></div></div>
+        </div>
+      </div>
+
+      <!-- DESKTOP: bottom-right pair -->
+      <div class="desk-pair-bot">
+        <div class="telem-card c-cyan" id="box3">
+          <div class="telem-label">Growth</div>
+          <div class="telem-value">27%</div>
+          <div class="telem-desc">Increase in<br>overall revenue</div>
+          <div class="telem-bar-track"><div class="telem-bar-fill" data-pct="27"></div></div>
+        </div>
+        <div class="telem-card c-warn" id="box4" style="margin-left:1px">
+          <div class="telem-label">Efficiency</div>
+          <div class="telem-value">40%</div>
+          <div class="telem-desc">Decrease in<br>processing time</div>
+          <div class="telem-bar-track"><div class="telem-bar-fill" data-pct="40"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- system strip (desktop) -->
+    <div class="sys-strip">
+      <div class="sys-item"><div class="sys-dot"></div>NODE <span>/ 04</span> ONLINE</div>
+      <div class="sys-item"><div class="sys-dot"></div>UPTIME <span>/ 99.97%</span></div>
+    </div>
+
+    <div class="scroll-hint" id="scrollHint">
+      <div class="scroll-arrow"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  gsap.registerPlugin(ScrollTrigger);
+
+  const car        = document.getElementById("car");
+  const trail      = document.getElementById("trail");
+  const letters    = gsap.utils.toArray(".value-letter");
+  const valueAdd   = document.getElementById("valueText");
+  const speedoFill = document.getElementById("speedoFill");
+  const sectorFill = document.getElementById("sectorFill");
+  const speedLines = document.getElementById("speedLines");
+  const progBar    = document.getElementById("progBar");
+  const scrollHint = document.getElementById("scrollHint");
+
+  // Speed lines
+  for(let i=0;i<16;i++){
+    const l=document.createElement("div");
+    l.className="speed-line";
+    l.style.cssText=`top:${10+Math.random()*80}%;width:${20+Math.random()*80}px;`;
+    speedLines.appendChild(l);
+  }
+
+  function getCarW(){
+    const r=car.getBoundingClientRect();
+    return r.width||Math.min(140, window.innerWidth*0.18);
+  }
+
+  let lastP=0;
+
+  gsap.to(car,{
+    scrollTrigger:{
+      trigger:".section", start:"top top", end:"bottom top",
+      scrub:1, pin:".track",
+      onUpdate(s){
+        const p=s.progress;
+        const cw=getCarW(), ex=window.innerWidth-cw;
+        const cx=p*ex, cc=cx+cw/2;
+
+        // reveal letters
+        const vr=valueAdd.getBoundingClientRect();
+        letters.forEach(l=>{ l.style.opacity=cc>=vr.left+l.offsetLeft?1:0; });
+
+        gsap.set(trail,{width:cc});
+        sectorFill.style.width=(p*100)+"%";
+
+        const spd=Math.abs(p-lastP)*1200;
+        speedoFill.style.height=Math.min(100,spd*400)+"%";
+        lastP=p;
+
+        speedLines.querySelectorAll(".speed-line").forEach((ln,i)=>{
+          const off=p*500*(0.4+(i%4)*0.2);
+          ln.style.opacity=p>0.04?0.35+Math.sin(p*18+i)*0.35:0;
+          ln.style.transform=`translateX(-${off%220}px)`;
+        });
+
+        progBar.style.width=(p*100)+"%";
+        scrollHint.style.opacity=p>0.03?0:"";
+      }
+    },
+    x:()=>window.innerWidth-getCarW(),
+    ease:"none"
+  });
+
+  // Animate a bar fill when a card becomes visible
+  function animateBar(id){
+    const fill=document.querySelector(id+" .telem-bar-fill");
+    if(fill) setTimeout(()=>fill.style.width=fill.dataset.pct+"%",80);
+  }
+
+  const total=()=>document.querySelector(".section").offsetHeight-window.innerHeight;
+
+  // Desktop cards
+  [["#box1",0.10],["#box2",0.25],["#box3",0.45],["#box4",0.62]].forEach(([id,frac])=>{
+    gsap.fromTo(id,{opacity:0,y:12},{
+      scrollTrigger:{
+        trigger:".section",
+        start:()=>`top+=${frac*total()} top`,
+        end:()=>`top+=${(frac+0.1)*total()} top`,
+        scrub:true, onEnter:()=>animateBar(id)
+      },
+      opacity:1, y:0
+    });
+  });
+
+  // Mobile cards — stagger into view together at 30% scroll
+  ["#mb1","#mb2","#mb3","#mb4"].forEach((id,i)=>{
+    const frac=0.28+i*0.05;
+    gsap.fromTo(id,{opacity:0,y:10},{
+      scrollTrigger:{
+        trigger:".section",
+        start:()=>`top+=${frac*total()} top`,
+        end:()=>`top+=${(frac+0.08)*total()} top`,
+        scrub:true, onEnter:()=>animateBar(id)
+      },
+      opacity:1, y:0
+    });
+  });
+
+  // Recalculate on resize / orientation change
+  let rt;
+  window.addEventListener("resize",()=>{
+    clearTimeout(rt);
+    rt=setTimeout(()=>ScrollTrigger.refresh(),200);
+  });
+</script>
+</body>
+</html>
